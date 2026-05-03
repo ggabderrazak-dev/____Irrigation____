@@ -1,0 +1,29 @@
+{
+  "title": "Irrigation API",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(irrigation_api_requests_total[1m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Predictions",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(irrigation_predictions_total[1m])) by (irrigation_needed)",
+          "legendFormat": "irrigation={{irrigation_needed}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+stages:
+  train:
+    cmd: python src/train_pipeline.py
+    deps:
+      - src/train_pipeline.py
+      - data/Smart_Farming_Crop_Yield_2024.csv
+    outs:
+      - models/model.pkl
+      - models/scaler.pkl
+    metrics:
+      - metrics.json:
+          cache: false

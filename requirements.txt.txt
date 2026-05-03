@@ -1,7 +1,2 @@
-pandas
-scikit-learn
-joblib
-fastapi
-uvicorn
-numpy
-matplotlib
+# Deprecated: use requirements.txt
+-r requirements.txt

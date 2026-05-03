@@ -1,10 +1,12 @@
 import random
+import time
 from pathlib import Path
 
 import joblib
 import numpy as np
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from api.database import init_db, log_prediction, get_history_7days, get_daily_aggregates_7days, get_anomalies_7days
@@ -18,6 +20,36 @@ MODEL_PATH = BASE_DIR / "models" / "model.pkl"
 SCALER_PATH = BASE_DIR / "models" / "scaler.pkl"
 
 app = FastAPI()
+REQUEST_COUNT = Counter(
+    "irrigation_api_requests_total",
+    "Total HTTP requests received by the irrigation API.",
+    ["method", "endpoint", "status_code"],
+)
+REQUEST_LATENCY = Histogram(
+    "irrigation_api_request_duration_seconds",
+    "HTTP request latency in seconds.",
+    ["method", "endpoint"],
+)
+PREDICTION_COUNT = Counter(
+    "irrigation_predictions_total",
+    "Total predictions grouped by irrigation decision.",
+    ["irrigation_needed"],
+)
+
+
+@app.middleware("http")
+async def prometheus_middleware(request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    endpoint = request.url.path
+    REQUEST_LATENCY.labels(request.method, endpoint).observe(time.perf_counter() - start)
+    REQUEST_COUNT.labels(request.method, endpoint, response.status_code).inc()
+    return response
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 register_error_handlers(app)   # ← branche tous les handlers d'erreur
 app.add_middleware(
     CORSMiddleware,
@@ -301,6 +333,7 @@ def predict(request: PredictRequest):
         if prediction == 1 else
         "Conditions favorables → pas d'irrigation 🌱"
     )
+    PREDICTION_COUNT.labels(str(prediction)).inc()
     return {"irrigation_needed": prediction, "message": message, "importance": importance}
 
 

@@ -1,0 +1,8 @@
+train:
+  data_path: data/Smart_Farming_Crop_Yield_2024.csv
+  model_path: models/model.pkl
+  scaler_path: models/scaler.pkl
+  metrics_path: metrics.json
+  test_size: 0.2
+  random_state: 42
+  n_estimators: 200
