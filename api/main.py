@@ -1,3 +1,4 @@
+import os
 import random
 import time
 from pathlib import Path
@@ -53,7 +54,11 @@ def metrics():
 register_error_handlers(app)   # ← branche tous les handlers d'erreur
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,17 +1,50 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
 env/
 
+# Logs
+*.log
 irrigation_errors.log
-api/irrigation_history.db
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.production.example
+irrigation_frontend/.env
+irrigation_frontend/.env.*
+!irrigation_frontend/.env.example
+
+# Frontend
+node_modules/
+irrigation_frontend/node_modules/
+dist/
+build/
+irrigation_frontend/dist/
+
+# ML / local artifacts
 mlruns/
 metrics.json
 automl_metrics.json
 
-irrigation_frontend/node_modules/
-irrigation_frontend/dist/
-
+# DVC
 .dvc/cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

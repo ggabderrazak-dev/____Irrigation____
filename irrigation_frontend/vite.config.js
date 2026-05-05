@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../api/static",   // Sortie directement dans ton dossier api/
+    outDir: process.env.VITE_BUILD_OUT_DIR || "dist",
     emptyOutDir: true,
   },
 });
