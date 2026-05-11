@@ -2,10 +2,28 @@
 Tests des endpoints FastAPI (main.py)
 Lancer avec : pytest tests/test_api.py -v
 """
+import hashlib
 import numpy as np
+import os
 import pytest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+os.environ["IRRIGATION_API_KEY"] = "test-api-key"
+os.environ["MODEL_SHA256"] = file_sha256(BASE_DIR / "models" / "model.pkl")
+os.environ["SCALER_SHA256"] = file_sha256(BASE_DIR / "models" / "scaler.pkl")
+AUTH_HEADERS = {"X-API-Key": "test-api-key"}
 
 
 # ── Mock du modèle et du scaler avant d'importer main ─────────────────────────
@@ -74,75 +92,83 @@ class TestPredict:
         mock_model.predict.return_value = np.array([1])
 
     def test_valid_payload_returns_200(self):
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert r.status_code == 200
 
-    def test_response_has_required_fields(self):
+    def test_missing_api_key_returns_401(self):
         r = client.post("/predict", json=VALID_PAYLOAD)
+        assert r.status_code == 401
+
+    def test_invalid_api_key_returns_401(self):
+        r = client.post("/predict", json=VALID_PAYLOAD, headers={"X-API-Key": "bad-key"})
+        assert r.status_code == 401
+
+    def test_response_has_required_fields(self):
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         data = r.json()
         assert "irrigation_needed" in data
         assert "message" in data
         assert "importance" in data
 
     def test_irrigation_needed_is_int(self):
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert isinstance(r.json()["irrigation_needed"], int)
 
     def test_irrigation_needed_is_binary(self):
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert r.json()["irrigation_needed"] in (0, 1)
 
     def test_importance_has_five_keys(self):
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert len(r.json()["importance"]) == 5
 
     def test_message_when_irrigation_needed(self):
         mock_model.predict.return_value = np.array([1])
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert "irrigation" in r.json()["message"].lower()
 
     def test_message_when_no_irrigation(self):
         mock_model.predict.return_value = np.array([0])
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert "pas d'irrigation" in r.json()["message"].lower()
 
     # ── Validation des bornes ──────────────────────────────────────────────
 
     def test_soil_moisture_below_zero_returns_422(self):
         payload = {**VALID_PAYLOAD, "soil_moisture": -5.0}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     def test_soil_moisture_above_100_returns_422(self):
         payload = {**VALID_PAYLOAD, "soil_moisture": 150.0}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     def test_temperature_above_60_returns_422(self):
         payload = {**VALID_PAYLOAD, "temperature": 70.0}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     def test_sunlight_above_24_returns_422(self):
         payload = {**VALID_PAYLOAD, "sunlight_hours": 25.0}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     def test_missing_field_returns_422(self):
         payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "rainfall"}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     def test_wrong_type_returns_422(self):
         payload = {**VALID_PAYLOAD, "soil_moisture": "pas_un_nombre"}
-        r = client.post("/predict", json=payload)
+        r = client.post("/predict", json=payload, headers=AUTH_HEADERS)
         assert r.status_code == 422
 
     # ── Modèle indisponible ────────────────────────────────────────────────
 
     def test_model_unavailable_returns_500(self, monkeypatch):
         monkeypatch.setattr(main, "model", None)
-        r = client.post("/predict", json=VALID_PAYLOAD)
+        r = client.post("/predict", json=VALID_PAYLOAD, headers=AUTH_HEADERS)
         assert r.status_code == 500
         assert r.json()["error"] == "model_error"
 
@@ -154,32 +180,32 @@ class TestPredict:
 class TestSimulate:
 
     def test_returns_200(self):
-        r = client.get("/test/simulate")
+        r = client.get("/test/simulate", headers=AUTH_HEADERS)
         assert r.status_code == 200
 
     def test_has_simulated_input(self):
-        r = client.get("/test/simulate")
+        r = client.get("/test/simulate", headers=AUTH_HEADERS)
         assert "simulated_input" in r.json()
 
     def test_simulated_input_has_all_fields(self):
-        data = client.get("/test/simulate").json()["simulated_input"]
+        data = client.get("/test/simulate", headers=AUTH_HEADERS).json()["simulated_input"]
         for field in ["soil_moisture", "temperature", "humidity", "rainfall", "sunlight_hours"]:
             assert field in data
 
     def test_soil_moisture_in_valid_range(self):
-        data = client.get("/test/simulate").json()["simulated_input"]
+        data = client.get("/test/simulate", headers=AUTH_HEADERS).json()["simulated_input"]
         assert 0 <= data["soil_moisture"] <= 100
 
     def test_different_values_each_call(self):
         """Deux appels successifs ne doivent pas retourner exactement les mêmes données."""
-        r1 = client.get("/test/simulate").json()["simulated_input"]
-        r2 = client.get("/test/simulate").json()["simulated_input"]
+        r1 = client.get("/test/simulate", headers=AUTH_HEADERS).json()["simulated_input"]
+        r2 = client.get("/test/simulate", headers=AUTH_HEADERS).json()["simulated_input"]
         # Il est astronomiquement improbable que toutes les valeurs soient identiques
         assert r1 != r2
 
     def test_model_unavailable_returns_500(self, monkeypatch):
         monkeypatch.setattr(main, "model", None)
-        r = client.get("/test/simulate")
+        r = client.get("/test/simulate", headers=AUTH_HEADERS)
         assert r.status_code == 500
 
 
@@ -191,24 +217,33 @@ class TestHistoryEndpoints:
 
     def test_history_returns_200(self):
         with patch("main.get_history_7days", return_value=[]):
-            assert client.get("/history").status_code == 200
+            assert client.get("/history", headers=AUTH_HEADERS).status_code == 200
 
     def test_analysis_returns_200(self):
         with patch("main.get_daily_aggregates_7days", return_value=[]):
-            assert client.get("/analysis").status_code == 200
+            assert client.get("/analysis", headers=AUTH_HEADERS).status_code == 200
 
     def test_anomalies_returns_200(self):
         with patch("main.get_anomalies_7days", return_value=[]):
-            assert client.get("/anomalies").status_code == 200
+            assert client.get("/anomalies", headers=AUTH_HEADERS).status_code == 200
 
     def test_history_returns_list(self):
         with patch("main.get_history_7days", return_value=[]):
-            r = client.get("/history")
+            r = client.get("/history", headers=AUTH_HEADERS)
             assert isinstance(r.json(), list)
 
     def test_database_error_returns_503(self):
         from error_handlers import DatabaseError
         with patch("main.get_history_7days", side_effect=DatabaseError("test")):
-            r = client.get("/history")
+            r = client.get("/history", headers=AUTH_HEADERS)
             assert r.status_code == 503
             assert r.json()["error"] == "database_error"
+
+    def test_history_requires_api_key(self):
+        assert client.get("/history").status_code == 401
+
+    def test_metrics_requires_api_key(self):
+        assert client.get("/metrics").status_code == 401
+
+    def test_metrics_accepts_api_key(self):
+        assert client.get("/metrics", headers=AUTH_HEADERS).status_code == 200

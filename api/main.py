@@ -1,11 +1,15 @@
 import os
 import random
+import secrets
 import time
+import hashlib
+from collections import defaultdict, deque
 from pathlib import Path
+from typing import Optional
 
 import joblib
 import numpy as np
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel
@@ -19,6 +23,71 @@ from error_handlers import (
 BASE_DIR   = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "models" / "model.pkl"
 SCALER_PATH = BASE_DIR / "models" / "scaler.pkl"
+MODEL_SHA256 = os.getenv("MODEL_SHA256")
+SCALER_SHA256 = os.getenv("SCALER_SHA256")
+API_KEY = os.getenv("IRRIGATION_API_KEY")
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_STATE = defaultdict(deque)
+
+
+def calculate_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_artifact_checksum(path: Path, expected_sha256: Optional[str], artifact_name: str) -> None:
+    if not expected_sha256:
+        raise ModelError(f"{artifact_name} checksum is not configured.")
+    if not path.is_file():
+        raise ModelError(f"{artifact_name} not found at {path}.")
+
+    actual_sha256 = calculate_sha256(path)
+    if not secrets.compare_digest(actual_sha256.lower(), expected_sha256.lower()):
+        raise ModelError(
+            f"{artifact_name} checksum mismatch. Expected {expected_sha256}, got {actual_sha256}."
+        )
+
+
+def check_rate_limit(request: Request) -> None:
+    client_host = request.client.host if request.client else "unknown"
+    now = time.time()
+    hits = RATE_LIMIT_STATE[client_host]
+    while hits and now - hits[0] > RATE_LIMIT_WINDOW_SECONDS:
+        hits.popleft()
+    if len(hits) >= RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded.",
+        )
+    hits.append(now)
+
+
+def require_api_key(
+    request: Request,
+    x_api_key: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> None:
+    check_rate_limit(request)
+    provided_key = x_api_key
+    if not provided_key and authorization and authorization.lower().startswith("bearer "):
+        provided_key = authorization[7:].strip()
+
+    if not API_KEY:
+        logger.critical("IRRIGATION_API_KEY is not configured; protected endpoint denied.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API authentication is not configured.",
+        )
+    if not provided_key or not secrets.compare_digest(provided_key, API_KEY):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key.",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
 
 app = FastAPI()
 REQUEST_COUNT = Counter(
@@ -48,7 +117,7 @@ async def prometheus_middleware(request, call_next):
     return response
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(require_api_key)])
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 register_error_handlers(app)   # ← branche tous les handlers d'erreur
@@ -65,9 +134,11 @@ app.add_middleware(
 
 # ─── Chargement du modèle ──────────────────────────────────────────────────────
 try:
+    verify_artifact_checksum(MODEL_PATH, MODEL_SHA256, "model.pkl")
+    verify_artifact_checksum(SCALER_PATH, SCALER_SHA256, "scaler.pkl")
     model  = joblib.load(MODEL_PATH)
     scaler = joblib.load(SCALER_PATH)
-    logger.info("Modèle et scaler chargés avec succès.")
+    logger.info("Modèle et scaler vérifiés puis chargés avec succès.")
 except Exception as e:
     logger.critical(f"Impossible de charger le modèle : {e}")
     model  = None
@@ -157,6 +228,22 @@ def home():
             div.innerHTML = '❌ ' + message;
         }
 
+        function getApiKey() {
+            let key = localStorage.getItem('irrigation_api_key');
+            if (!key) {
+                key = prompt('Cle API requise');
+                if (key) localStorage.setItem('irrigation_api_key', key);
+            }
+            return key || '';
+        }
+
+        function authHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'X-API-Key': getApiKey()
+            };
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
 
             // ── Prédiction manuelle ──────────────────────────────────────────
@@ -178,7 +265,7 @@ def home():
                 try {
                     const response = await fetch('/predict', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: authHeaders(),
                         body: JSON.stringify(payload)
                     });
                     const data = await response.json();
@@ -212,7 +299,7 @@ def home():
                 simDiv.innerHTML = '⏳ Simulation en cours...';
 
                 try {
-                    const res = await fetch('/test/simulate');
+                    const res = await fetch('/test/simulate', { headers: authHeaders() });
                     const data = await res.json();
 
                     if (!res.ok) {
@@ -253,7 +340,7 @@ def home():
             loadBtn.textContent = 'Chargement...';
 
             try {
-                const res  = await fetch('/analysis');
+                const res  = await fetch('/analysis', { headers: authHeaders() });
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -280,7 +367,7 @@ def home():
                     { title: 'Fréquence irrigation' }
                 );
 
-                const anomRes    = await fetch('/anomalies');
+                const anomRes    = await fetch('/anomalies', { headers: authHeaders() });
                 const anomalies  = await anomRes.json();
                 const alertDiv   = document.getElementById('anomaly-alert');
 
@@ -305,7 +392,7 @@ def home():
 
 
 # ─── Prédiction ────────────────────────────────────────────────────────────────
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(require_api_key)])
 def predict(request: PredictRequest):
     # 1. Vérifier que le modèle est disponible
     if model is None or scaler is None:
@@ -343,7 +430,7 @@ def predict(request: PredictRequest):
 
 
 # ─── Simulation capteur ────────────────────────────────────────────────────────
-@app.get("/test/simulate")
+@app.get("/test/simulate", dependencies=[Depends(require_api_key)])
 def simulate_sensor():
     """Génère des capteurs aléatoires et retourne la prédiction du modèle."""
     if model is None or scaler is None:
@@ -361,16 +448,16 @@ def simulate_sensor():
 
 
 # ─── Historique ────────────────────────────────────────────────────────────────
-@app.get("/history")
+@app.get("/history", dependencies=[Depends(require_api_key)])
 def get_history():
     return get_history_7days()
 
 
-@app.get("/analysis")
+@app.get("/analysis", dependencies=[Depends(require_api_key)])
 def get_analysis():
     return get_daily_aggregates_7days()
 
 
-@app.get("/anomalies")
+@app.get("/anomalies", dependencies=[Depends(require_api_key)])
 def get_anomalies():
     return get_anomalies_7days()

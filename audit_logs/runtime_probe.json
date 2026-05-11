@@ -1,0 +1,65 @@
+[
+    {
+        "Name":  "frontend_static",
+        "Status":  0,
+        "Ms":  2774,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "api_home",
+        "Status":  0,
+        "Ms":  2434,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "history_auth",
+        "Status":  0,
+        "Ms":  2547,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "analysis_auth",
+        "Status":  0,
+        "Ms":  2427,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "anomalies_auth",
+        "Status":  0,
+        "Ms":  2390,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "simulate_auth",
+        "Status":  0,
+        "Ms":  2311,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "metrics_auth",
+        "Status":  0,
+        "Ms":  2275,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "predict_auth",
+        "Status":  0,
+        "Ms":  2432,
+        "Bytes":  0,
+        "Error":  "Impossible de se connecter au serveur distant"
+    },
+    {
+        "Name":  "history_no_auth",
+        "Status":  0,
+        "Ms":  0,
+        "Bytes":  0,
+        "Error":  "expected unauthorized"
+    }
+]

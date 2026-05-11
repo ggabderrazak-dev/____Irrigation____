@@ -1,0 +1,90 @@
+[
+  {
+    "name": "home",
+    "status_set": [
+      200
+    ],
+    "min_ms": 6.46,
+    "avg_ms": 30.14,
+    "p95_ms": 81.51,
+    "max_ms": 83.19,
+    "sample_error": ""
+  },
+  {
+    "name": "history_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 18.78,
+    "avg_ms": 56.5,
+    "p95_ms": 192.5,
+    "max_ms": 198.37,
+    "sample_error": ""
+  },
+  {
+    "name": "analysis_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 17.62,
+    "avg_ms": 36.44,
+    "p95_ms": 62.74,
+    "max_ms": 63.3,
+    "sample_error": ""
+  },
+  {
+    "name": "anomalies_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 23.03,
+    "avg_ms": 40.02,
+    "p95_ms": 96.91,
+    "max_ms": 99.59,
+    "sample_error": ""
+  },
+  {
+    "name": "simulate_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 219.27,
+    "avg_ms": 419.07,
+    "p95_ms": 1329.42,
+    "max_ms": 1361.61,
+    "sample_error": ""
+  },
+  {
+    "name": "predict_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 215.1,
+    "avg_ms": 583.45,
+    "p95_ms": 1175.77,
+    "max_ms": 1180.81,
+    "sample_error": ""
+  },
+  {
+    "name": "metrics_auth",
+    "status_set": [
+      200
+    ],
+    "min_ms": 34.44,
+    "avg_ms": 48.73,
+    "p95_ms": 67.92,
+    "max_ms": 67.98,
+    "sample_error": ""
+  },
+  {
+    "name": "history_no_auth",
+    "status_set": [
+      401
+    ],
+    "min_ms": 9.09,
+    "avg_ms": 25.47,
+    "p95_ms": 33.45,
+    "max_ms": 33.48,
+    "sample_error": "{\"detail\":\"Invalid or missing API key.\"}"
+  }
+]
